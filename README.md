@@ -117,3 +117,70 @@ To finish it off, paste your ngrok URL into the `When a message comes in` box on
 After the configuration is done, simply send a message to you whatsapp sandbox and start chatting!
 
 
+## Architecture
+
+Karlos is an AI assistant powered by AI and as such, a lot of its complexity lays on the prompt structure, assistant logic and assistant tools, this initial schema however, is purely representative of the data flow.
+
+![image](https://github.com/user-attachments/assets/644c8d72-3936-482b-a766-09a3f201acad)
+
+### User input
+Every interaction with the API starts with a user conversation, we do not initiate conversation with customers.
+
+### Twilio
+Twilio works as a bridge between our business logic and the agent's AI, its primary function is to pass information into a dedicated API.
+
+### API
+As Restful API's are inherently stateless, we needed another way to handle small and temporary state data, as such, the API works in a way where it will first check for existing cache, if there is no cache available for the user, it will then create an openAI thread, fetch its ID value, then create a mapping into redis where the key is the user's whatsapp identifier and the value is the id of the thread they are on, since we dont handle data directly on the API, the is no need to save anything else.
+
+### Redis
+its a small single schema db that stores openai thread ids using user's whatsapp identifier as key values, this data is alive for 30 minutes after its last update.
+
+### OpenAI
+We will get into more depth about the prompt architecture on a following section.
+
+### Twilio 
+When everything is set and done, we will not respond to the webhook twilio sends as it is likely to fail due to the extended wait times we can expect from openAI's assistant tools, so what we do is call a send api request to send a message directly after the process is completed.
+
+## Prompt Architecture
+
+The prompt architecture is quite simple, but it is worth explaining a little bit about it.
+
+![image](https://github.com/user-attachments/assets/41df51e4-33e3-46bd-ba17-f96abb8acd03)
+
+### Agent Upsert
+The first check our API will do, is check if an agent exist on the openAI account, and if it doesnt,  then create it. this is done to allow the user to provide different configuration keys without needing to manually configure the assistant on openAI's UI.
+
+### Thread Upsert
+As explained on the previous section, if a thread exists on cache, we will use the existing thread Id, if it doesnt, then we are going to create a new thread, and save that data into redis for future use.
+
+### Create message
+We will pass the user's message into the assistant's thread
+
+### Create and Poll
+This step will make the assistant, poll the new message and respond to it depending on context, sometimes, an assistant will need to use one of the tools it was configured to work with in order to perform a task, in that case, we will execute that functionality in the API, add the tool response onto the thread and poll again, we shall repeat this until no further tool is needed.
+
+### Return last message
+After a thread has been polled and no other tool is required, we will fetch the response from the model, and return this to the API to handle.
+
+## Open AI Assistant API vs regular ChatGPT
+You might have notice by now that we are using open AI's Assistant API rather than the regular chatGPT endpoints.
+
+There are a couple of reasons for this decision, namely, we wanted to provide the customer with a very specific functionality, ChatGPT can be manipulated to ignore its instructions and function as any ChatGPT instance, this can cause alucinations, irrelevant info dump, or even innapropiate behavior.
+
+ChatGPT also opens the door to malicios actors who might try to abuse the agent to get access to a free of restrictions OpenAI key, with assistants we have more tools to prevent such things from happening.
+
+### Response times
+A huge disadvantage on using Assistants instead of ChatGPT, is the waiting, Assistants are quite slower than the regular ChatGPT APi, which can be frustating for some users, but the more reliable responses compensates for the wait time most of the time.
+
+### Tools
+Karlos uses 2 tools for the time beign. `fetch_vehicles_data` and `fetch_credit_estimate`.
+
+### fetch_vehicles_data
+This function reads a csv file containing data of available vehicles, it uses this information to make suggestions to the customers and to fetch the stock Id, which is needed for the next function.
+
+### fetch_credit_estimate
+This functions creates a credit estimate using the user's prefered vehicle, the price of it, the downpayment on a 10% interest rate
+
+
+ 
+
