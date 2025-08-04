@@ -15,8 +15,8 @@ app = Flask(__name__)
 # Initialize Swagger
 swagger = Swagger(app)
 
-app.register_blueprint(api, url_prefix='/api')
+app.register_blueprint(api, url_prefix="/api")
 
 # main driver function
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run()
